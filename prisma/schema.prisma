@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id // Use the Clerk user ID
+  email         String   @unique
+  name          String
+  agentCredits  Int      @default(1)
+  usuageCredits Int      @default(100)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  AgentConfig   AgentConfig[]     
+}
+
+model Tool {
+  id            String   @id @default(uuid()) @db.Uuid
+  slug          String   @unique @db.VarChar(100)
+  name          String   @db.VarChar(150)
+  description   String?
+  category      String   @db.VarChar(100)
+  type          String   @db.VarChar(50)
+  provider      String   @db.VarChar(100)
+  icon          String?  @db.VarChar(255)
+  status        String?  @default("active") @db.VarChar(50)
+  requiresAuth  Boolean? @default(false) @map("requires_auth")
+  authType      String?  @db.VarChar(50) @map("auth_type")
+  authProvider  String?  @db.VarChar(100) @map("auth_provider")
+  capabilities  Json?    @default("[]") 
+  useCases      Json?    @default("[]") @map("use_cases")
+  permissions   Json?    @default("[]")
+  approvalRules Json?    @map("approval_rules")
+  config        Json?    
+  riskLevel     String?  @default("low") @db.VarChar(30) @map("risk_level")
+  canRead       Boolean? @default(false) @map("can_read")
+  canWrite      Boolean? @default(false) @map("can_write")
+  canDelete     Boolean? @default(false) @map("can_delete")
+  canExecute    Boolean? @default(true) @map("can_execute")
+  enabled       Boolean? @default(true)
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("tools")
+}
+model AgentConfig {
+  id              Int      @id @default(autoincrement())
+  userEmail       String   @map("email")
+  agentId         String   @unique
+  name            String?
+  agentImage      String?
+  description     String?
+  instructions    String?
+  objective       String?
+  tools           String[]
+  skills          String[]
+  schedule        Json?
+  outputFormat    String?
+  status          String?  @default("active")
+  composioSession String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user            User        @relation(fields: [userEmail], references: [email])
+  agentRuns       AgentRun[]
+
+  @@map("agentConfig")
+}
+
+model AgentRun {
+  id           String    @id @default(uuid()) @db.Uuid
+  agentId      String    @db.VarChar
+  userEmail    String    @map("email") @db.Text
+  scheduledFor DateTime  @map("scheduled_for") @db.Timestamptz
+  timezone     String    @db.VarChar(100)
+  status       String    @default("scheduled") @db.VarChar
+  output       Json?     @db.JsonB
+  error        String?   @db.Text
+  queuedAt     DateTime? @map("queued_at") @db.Timestamptz
+  startedAt    DateTime? @map("started_at") @db.Timestamptz
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  agentConfig  AgentConfig @relation(fields: [agentId], references: [agentId])
+
+  @@unique([agentId, scheduledFor], map: "unique_agent_occurrence")
+  @@index([status, scheduledFor], map: "agent_run_schedule_lookup")
+  @@map("agentRun")
+}
