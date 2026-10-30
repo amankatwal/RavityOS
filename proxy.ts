@@ -12,6 +12,10 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
+   if (request.nextUrl.pathname.startsWith("/api/inngest")) {
+    return;
+  }
+
   const { userId } = await auth();
 
   if (userId && isRedirectToDashboardRoute(request)) {
