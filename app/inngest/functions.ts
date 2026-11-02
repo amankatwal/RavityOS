@@ -5,6 +5,31 @@ import { AgentConfig } from "../generated/prisma/client";
 import { Agent } from "../(Main)/dashboard/agents/clientStore";
 import { runAgent } from "@/lib/run-agent";
 
+const toExecutableAgentConfig = (
+    agentConfig: Omit<AgentConfig, "createdAt"> & { createdAt: Date | string },
+    userEmail: string,
+): Agent => ({
+    id: agentConfig.id,
+    userEmail: agentConfig.userEmail ?? userEmail,
+    agentId: agentConfig.agentId,
+    name: agentConfig.name ?? "",
+    agentImage: agentConfig.agentImage ?? "",
+    description: agentConfig.description ?? "",
+    instructions: agentConfig.instructions ?? "",
+    objective: agentConfig.objective ?? "",
+    tools: agentConfig.tools,
+    skills: Array.isArray(agentConfig.skills)
+        ? (agentConfig.skills as string[])
+        : [],
+    schedule: (agentConfig.schedule ?? {
+        type: "manual",
+    }) as AgentConfig["schedule"],
+    outputFormat: agentConfig.outputFormat ?? "",
+    status: agentConfig.status ?? "active",
+    createdAt: new Date(agentConfig.createdAt),
+    composioSession: agentConfig.composioSession ?? null,
+});
+
 export const ProcessScheduledAgent = inngest.createFunction(
     {
         id: "process-scheduled-agents",
@@ -82,40 +107,73 @@ export const ProcessScheduledAgent = inngest.createFunction(
 
                     continue;
                 }
-                const output = await step.run(
+                let output = await step.run(
                     `execute-agent-${run.id}`,
                     async () => {
-                        const agentConfig = run.agentConfig;
-                        const executableAgentConfig: Agent = {
-                            id: agentConfig.id,
-                            userEmail:
-                                agentConfig.userEmail ?? run.userEmail,
-                            agentId: agentConfig.agentId,
-                            name: agentConfig.name ?? "",
-                            agentImage: agentConfig.agentImage ?? "",
-                            description: agentConfig.description ?? "",
-                            instructions: agentConfig.instructions ?? "",
-                            objective: agentConfig.objective ?? "",
-                            tools: agentConfig.tools,
-                            skills: Array.isArray(agentConfig.skills)
-                                ? (agentConfig.skills as string[])
-                                : [],
-                            schedule: (agentConfig.schedule ?? {
-                                type: "manual",
-                            }) as AgentConfig["schedule"],
-                            outputFormat: agentConfig.outputFormat ?? "",
-                            status: agentConfig.status ?? "active",
-                            createdAt: new Date(agentConfig.createdAt),
-                            composioSession: agentConfig.composioSession ?? null,
-                        };
-
                         return await runAgent({
-                            agentConfig: executableAgentConfig,
+                            agentConfig: toExecutableAgentConfig(
+                                run.agentConfig,
+                                run.userEmail,
+                            ),
                             userEmail: run.userEmail,
-                            input: executableAgentConfig.objective ?? "",
+                            input: run.agentConfig.objective ?? "",
                         });
                     },
                 );
+
+                const humanInputs: string[] = [];
+                let interaction = 0;
+                while (output?.intervention) {
+                    const interventionRequest = output.intervention.action || output.message;
+                    const interactionId = interaction++;
+                    await step.run(
+                        `mark-run-awaiting-input-${run.id}-${interactionId}`,
+                        async () => {
+                            await prisma.agentRun.update({
+                                where: { id: run.id },
+                                data: {
+                                    status: "awaiting_input",
+                                    output: JSON.stringify(output),
+                                },
+                            });
+                        },
+                    );
+
+                    const humanResponse = await step.waitForEvent(
+                        `human-input-${run.id}-${interactionId}`,
+                        {
+                            event: "agent/input.responded",
+                            timeout: "24h",
+                            data: { runId: run.id },
+                        },
+                    );
+                    if (!humanResponse?.data.response) {
+                        throw new Error("Human input was not provided");
+                    }
+                    humanInputs.push(humanResponse.data.response);
+
+                    await step.run(
+                        `resume-run-${run.id}-${interactionId}`,
+                        async () => {
+                            await prisma.agentRun.update({
+                                where: { id: run.id },
+                                data: { status: "running" },
+                            });
+                        },
+                    );
+                    output = await step.run(
+                        `resume-agent-${run.id}-${interactionId}`,
+                        async () =>
+                            runAgent({
+                                agentConfig: toExecutableAgentConfig(
+                                    run.agentConfig,
+                                    run.userEmail,
+                                ),
+                                userEmail: run.userEmail,
+                                input: `${run.agentConfig.objective ?? ""}\n\nAgent request:\n${interventionRequest}\n\nHuman input:\n${humanInputs.join("\n")}`,
+                            }),
+                    );
+                }
 
                 await step.run(
                     `run-completed-${run.id}`,
@@ -142,7 +200,8 @@ export const ProcessScheduledAgent = inngest.createFunction(
                 if (
                     schedule?.type === "recurring" &&
                     schedule.frequency === "daily" &&
-                    schedule.time
+                    schedule.time &&
+                    event.name !== "agent/run.now"
                 ) {
                     await step.run(
                         `schedule-next-run-${run.id}`,
@@ -185,7 +244,7 @@ export const ProcessScheduledAgent = inngest.createFunction(
                         await prisma.agentRun.updateMany({
                             where: {
                                 id: run.id,
-                                status: "running",
+                                status: { in: ["running", "awaiting_input"] },
                             },
                             data: {
                                 status: "failed",

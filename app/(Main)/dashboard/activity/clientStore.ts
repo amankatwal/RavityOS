@@ -10,7 +10,7 @@ export type AgentRun = {
     task: string,
     status: string,
     updatedAt:string,
-    output: string
+  output: unknown
 }
 
 export type ActivityType = {
@@ -20,28 +20,40 @@ export type ActivityType = {
     fetchAgentRuns: ()=>void,
 }
 
+  type AgentRunResponse = {
+    id: string,
+    agentConfig: { name: string | null, objective: string | null },
+    status: string,
+    completedAt: string | null,
+    startedAt: string | null,
+    queuedAt: string | null,
+    createdAt: string,
+    output: unknown,
+  }
+
 export const useActivityStore = create<ActivityType>((set)=>({
      agentRuns: [],
      agentRunsError:null,
      agentRunsLoader:false,
      fetchAgentRuns: async()=>{
-             set({agentRunsLoader: true})
+             set({agentRunsLoader: true, agentRunsError: null})
                try {
                 const res = await axios.get(`/api/activity`)
                 
                 if(res.data.message){
-                    set({agentRunsError: res.data.message})
+                    set({agentRuns: [], agentRunsError: null})
                     return
                 }
-                console.log(res.data.data)
-               set({agentRuns: res.data.data.map((run:any)=>({
+               set({agentRunsError: null, agentRuns: res.data.data.map((run: AgentRunResponse)=>({
                 id: run.id,
-                name: run.agentConfig.name,
-                task: run.agentConfig.objective,
+                name: run.agentConfig.name ?? "",
+                task: run.agentConfig.objective ?? "",
                 status: run.status,
                 updatedAt: run.completedAt ?? run.startedAt ?? run.queuedAt ?? run.createdAt,
+                output: run.output,
                }))})
-               } catch (err) {
+               } catch {
+                set({agentRunsError: "Unable to load activity. Try again."})
                   toast.add({
                     type:"error",
                     title: "Bad Request"

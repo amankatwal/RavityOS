@@ -84,7 +84,7 @@ model AgentRun {
   startedAt    DateTime? @map("started_at") @db.Timestamptz
   completedAt  DateTime? @map("completed_at") @db.Timestamptz
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
-
+  
   agentConfig  AgentConfig @relation(fields: [agentId], references: [agentId])
 
   @@unique([agentId, scheduledFor], map: "unique_agent_occurrence")

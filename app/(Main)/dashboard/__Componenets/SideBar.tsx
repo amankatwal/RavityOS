@@ -46,9 +46,11 @@ export default function SideBar({isPremium}:{isPremium: boolean}) {
             );
           })}
         </nav>
-        <div className="w-full flex justify-center mt-20">
-         {!isPremium && <Link href="/#pricing"><Button variant="link">Upgrade to pro</Button></Link>}
-        </div>
+        {!isPremium && (
+          <div className="mt-3 flex w-full justify-center lg:mt-20">
+            <Link href="/#pricing"><Button variant="link">Upgrade to pro</Button></Link>
+          </div>
+        )}
       </div>
     </aside>
   );

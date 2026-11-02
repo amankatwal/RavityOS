@@ -85,7 +85,7 @@ form.setValue("prompt","")
   return (
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger render={<Button variant={'secondary'} className={'cursor-pointer'}><MessagesSquare /> Chat with Agent</Button>} />
-      <SheetContent>
+      <SheetContent className="data-[side=right]:w-screen data-[side=right]:sm:max-w-none lg:data-[side=right]:w-1/3">
         <SheetHeader>
             <SheetHeader className="flex flex-row gap-4 items-center">
                         <div>

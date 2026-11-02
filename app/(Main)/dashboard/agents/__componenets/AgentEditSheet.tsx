@@ -213,7 +213,7 @@ const submitForm = form.handleSubmit(async (values) => {
       }}
     >
       <SheetTrigger render={trigger ?? <Button variant="outline" size="sm" className="cursor-pointer gap-2"><Pencil /></Button>} />
-      <SheetContent>
+      <SheetContent className="data-[side=right]:w-screen data-[side=right]:sm:max-w-none lg:data-[side=right]:w-1/4">
         <SheetHeader className="flex flex-row gap-4 items-center">
             <div>
             <Image src={agentImage} unoptimized width={30} height={30} alt="avatar" />

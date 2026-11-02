@@ -1,13 +1,14 @@
 "use client"
 import React from 'react'
 import { useAgentStore } from '../clientStore'
-import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import Image from 'next/image'
 import { Badge } from '@/components/ui/badge'
-import { Calendar, CheckCheck, Ellipsis, Loader, Pause, Pencil, Play, PlayIcon, PlaySquare, Trash } from 'lucide-react'
+import { CalendarDays, CheckCheck, Ellipsis, Loader, Pause, Pencil, Play, PlaySquare, Trash, Wrench } from 'lucide-react'
 import { AnimatedButton } from '@/components/ui/AnimatedButton'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { AgentEditSheet } from './AgentEditSheet'
 import type { AgentConfigType } from '@/app/data/AgentConfigResSchema'
 import { AgentChat } from './AgentChat'
@@ -41,35 +42,89 @@ const toAgentConfigResponse = (agent: ReturnType<typeof useAgentStore.getState>[
 }
 
 export default function MyAgents() {
-  const { fetchAllAgents, agents, changeAgentStatus, runAgent, agentrunLoader } = useAgentStore()
+  const { fetchAllAgents, agents, agentsLoader, changeAgentStatus, runAgent, agentrunLoader } = useAgentStore()
   const [openAgentId, setOpenAgentId] = React.useState<string | null>(null)
-  const [openDelete, setOpenDelete
-
-  ] = React.useState(false)
+  const [openDeleteAgentId, setOpenDeleteAgentId] = React.useState<string | null>(null)
   React.useEffect(() => {
     void fetchAllAgents()
   }, [fetchAllAgents])
 
   return (
     <div className='flex flex-col gap-10'>
-      <div className='flex flex-col gap-5 py-10'>
-        <h1 className='text-2xl font-bold'>My Agents</h1>
-        <p className='text-sm font-semibold text-muted-foreground'>Run, Manage and update all the agents that you need</p>
+      <div className='flex flex-wrap items-end justify-between gap-4 py-10'>
+        <div className='flex flex-col gap-2'>
+          <h1 className='text-2xl font-bold'>My Agents</h1>
+          <p className='text-sm text-muted-foreground'>Run, manage, and update your agents.</p>
+        </div>
+        {!agentsLoader && agents.length > 0 && (
+          <Badge variant='outline' className='px-3 py-1 text-xs'>
+            {agents.length} {agents.length === 1 ? 'agent' : 'agents'}
+          </Badge>
+        )}
       </div>
-      <div className='grid sm:grid-cols-2 grid-cols-1 gap-10'>
+      <div className='grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3'>
+        {agentsLoader && agents.length === 0 && Array.from({ length: 3 }, (_, index) => (
+          <Card key={index} className='rounded-md p-5'>
+            <div className='flex items-center gap-4'>
+              <Skeleton className='size-14 rounded-md' />
+              <div className='flex flex-1 flex-col gap-2'>
+                <Skeleton className='h-4 w-2/3' />
+                <Skeleton className='h-3 w-1/3' />
+              </div>
+            </div>
+            <Skeleton className='mt-5 h-10 w-full' />
+            <Skeleton className='mt-5 h-9 w-full' />
+          </Card>
+        ))}
+        {!agentsLoader && agents.length === 0 && (
+          <div className='col-span-full rounded-md border border-dashed p-10 text-center'>
+            <h2 className='font-semibold'>No agents yet</h2>
+            <p className='mt-2 text-sm text-muted-foreground'>Create an agent to see it here.</p>
+          </div>
+        )}
         {agents.map((agent) => {
           const response = toAgentConfigResponse(agent)
-          const scheduleType = response.config?.schedule.frequency ?? 'once'
+          const schedule = response.config?.schedule
+          const scheduleLabel = schedule?.type === 'recurring'
+            ? schedule.frequency
+            : schedule?.type === 'once' ? 'One-time' : 'Manual'
+          const isRunning = agentrunLoader === agent.agentId
+          const tools = (agent.tools ?? []).filter((tool): tool is string => typeof tool === 'string')
 
           return (
-            <Card key={agent.id} className='max-w-md px-5 py-5 relative'>
-              <div className='absolute top-3 right-3'>
+            <Card key={agent.id} className='rounded-md border border-border/70 p-0 transition-colors hover:border-primary/40'>
+              <CardHeader className='gap-4 p-5'>
+                <div className='flex min-w-0 items-start justify-between gap-3'>
+                  <div className='flex min-w-0 items-center gap-3'>
+                    <Image
+                      unoptimized
+                      width={56}
+                      height={56}
+                      className='size-14 shrink-0 rounded-md bg-muted object-cover'
+                      src={agent.agentImage ?? 'https://api.dicebear.com/10.x/gaze/svg?tags=animation&seed=412e72eb-5b6f-4b9b-b5c4-982c7722e1f1'}
+                      alt=''
+                    />
+                    <div className='min-w-0'>
+                      <CardTitle className='truncate text-base'>{agent.name || 'Untitled agent'}</CardTitle>
+                      <div className='mt-1'>
+                        {agent.status === 'active' ? (
+                          <Badge variant='ghost' className='bg-green-700/10 text-green-700'>
+                            <CheckCheck /> Active
+                          </Badge>
+                        ) : (
+                          <Badge variant='ghost' className='bg-yellow-500/15 text-yellow-700'>
+                            {agent.status ?? 'Idle'}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 <DropdownMenu>
-                  <DropdownMenuTrigger render={<Button variant="outline" className='hover:cursor-pointer' size={"icon-sm"}><Ellipsis /></Button>} />
+                  <DropdownMenuTrigger render={<Button variant='outline' className='shrink-0' size='icon-sm' aria-label={`Actions for ${agent.name ?? 'agent'}`}><Ellipsis /></Button>} />
                   <DropdownMenuContent>
                     <DropdownMenuGroup>
                       <DropdownMenuLabel>Agent actions</DropdownMenuLabel>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => runAgent(agent.agentId)} disabled={isRunning}>
                         <Play /> Run Now
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={()=>changeAgentStatus(agent, agent.status === "active" ? "pause" : "active")}>
@@ -85,14 +140,15 @@ export default function MyAgents() {
                       </DropdownMenuItem>
                     </DropdownMenuGroup>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={()=>setOpenDelete(true)} >
-                    <Trash /> Delete Agent
-                     
-                      
+                    <DropdownMenuItem onClick={() => setOpenDeleteAgentId(agent.agentId)}>
+                      <Trash /> Delete Agent
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-
+                </div>
+                <CardDescription className='line-clamp-2 min-h-10'>
+                  {agent.description || 'No description provided.'}
+                </CardDescription>
                 <AgentEditSheet
                   agentId={agent.agentId}
                   response={response}
@@ -105,32 +161,40 @@ export default function MyAgents() {
                     </Button>
                   }
                 />
-                 <DeleteDialog agentId={agent.agentId} open={openDelete} onOpenChange={setOpenDelete
-
-                 }/>
-              </div>
-              <CardHeader className='flex flex-col gap-5'>
-                <Image unoptimized width={88} height={88} src={agent.agentImage ?? "https://api.dicebear.com/10.x/gaze/svg?tags=animation&seed=412e72eb-5b6f-4b9b-b5c4-982c7722e1f1"} alt='Avatar' />
-                <div className='flex items-center gap-5'>
-                  <CardTitle>
-                    {agent.name}
-                  </CardTitle>
-                  {agent.status === "active" ? (
-                    <Badge variant={'ghost'} className='bg-green-700/20 text-green-700'><CheckCheck />{agent.status}</Badge>
-                  ) : (
-                    <Badge variant={'ghost'} className='bg-yellow-500/20 text-yellow-600'>{agent.status ?? 'idle'}</Badge>
-                  )}
-                </div>
-                <CardDescription>
-                  {(agent.description ?? '').slice(0, 100)}{(agent.description ?? '').length > 100 ? '...' : ''}
-                </CardDescription>
-                <CardDescription className='flex gap-5 items-center'>
-                  <Calendar className='text-chart-5' />{scheduleType}
-                </CardDescription>
               </CardHeader>
-              <CardFooter className='grid grid-cols-2 gap-3'>
-                {agentrunLoader === agent.agentId ? <Button><Loader className='animate-spin' /> Processing...</Button> : <AnimatedButton className='w-full' onClick={()=>runAgent(agent.agentId)}><Play /> Run Agent</AnimatedButton>}
-                
+              <CardContent className='flex flex-col gap-4 px-5 pb-5'>
+                <div className='grid grid-cols-2 gap-3 border-y py-3'>
+                  <div className='flex min-w-0 items-center gap-2'>
+                    <CalendarDays className='size-4 shrink-0 text-muted-foreground' />
+                    <span className='truncate text-sm'>{scheduleLabel}</span>
+                  </div>
+                  <div className='flex min-w-0 items-center gap-2'>
+                    <Wrench className='size-4 shrink-0 text-muted-foreground' />
+                    <span className='truncate text-sm'>{tools.length} {tools.length === 1 ? 'tool' : 'tools'}</span>
+                  </div>
+                </div>
+                {tools.length > 0 && (
+                  <div className='flex min-h-6 flex-wrap gap-1.5'>
+                    {tools.slice(0, 3).map((tool) => (
+                      <Badge key={tool} variant='outline' className='max-w-full truncate text-xs font-normal'>
+                        {tool.replaceAll('_', ' ')}
+                      </Badge>
+                    ))}
+                    {tools.length > 3 && <span className='self-center text-xs text-muted-foreground'>+{tools.length - 3}</span>}
+                  </div>
+                )}
+                <DeleteDialog
+                  agentId={agent.agentId}
+                  open={openDeleteAgentId === agent.agentId}
+                  onOpenChange={(nextOpen) => setOpenDeleteAgentId(nextOpen ? agent.agentId : null)}
+                />
+              </CardContent>
+              <CardFooter className='grid grid-cols-1 gap-2 border-t px-5 py-4 sm:grid-cols-2'>
+                {isRunning ? (
+                  <Button className='w-full' disabled><Loader className='animate-spin' /> Processing...</Button>
+                ) : (
+                  <AnimatedButton className='w-full' onClick={() => runAgent(agent.agentId)}><Play /> Run Agent</AnimatedButton>
+                )}
                 <AgentChat agentId={agent.agentId} />
               </CardFooter>
             </Card>
