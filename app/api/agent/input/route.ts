@@ -1,4 +1,5 @@
 import { inngest } from "@/app/inngest/client";
+import { ajExpensive } from "@/lib/arcjet";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
@@ -12,6 +13,14 @@ export async function POST(req: NextRequest) {
       { success: false, message: "User not authenticated" },
       { status: 401 },
     );
+  }
+
+  const decision = await ajExpensive.protect(req, { userId: user.id })
+  if (decision.isDenied()) {
+    return NextResponse.json(
+      { success: false, message: "Request denied" },
+      { status: 429 },
+    )
   }
 
   let runId: string;

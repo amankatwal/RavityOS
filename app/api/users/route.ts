@@ -1,4 +1,4 @@
-import { ajBasic } from "@/lib/arcjet";
+import { ajBasic, ajSignup } from "@/lib/arcjet";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
@@ -10,14 +10,17 @@ export async function POST(request: NextRequest){
     if(!user){
         return NextResponse.json({success: false, message: "User not found", status: 404})
     }
-       const decision = await ajBasic.protect(request,{userId:user.id})
+       const email = user.primaryEmailAddress?.emailAddress
+       const decision = email
+        ? await ajSignup.protect(request, { email })
+        : await ajBasic.protect(request, { userId: user.id })
        if(decision.isDenied()){
         return NextResponse.json({success: false, message: `Request denied: ${decision.reason}`, status: 403})
        }
     try {
         const userResult = await prisma.user.findUnique({
         where: {
-            email: user?.primaryEmailAddress?.emailAddress ?? ''
+            email: email ?? ''
         }
     })
     if(!userResult && user.primaryEmailAddress?.emailAddress && user.fullName){

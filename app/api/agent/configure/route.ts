@@ -1,4 +1,5 @@
 import { generateText, Output } from "ai";
+import { ajAi, ajAiPrompt, ajBasic, ajNetwork } from "@/lib/arcjet";
 import {openai} from "@ai-sdk/openai"
 import { NextRequest, NextResponse } from "next/server";
 import { AgentConfigSystemPrompt } from "@/app/data/AgentConfigSytemPrompt";
@@ -30,6 +31,16 @@ export async function POST(request: NextRequest) {
 
   if (!userEmail) {
     return NextResponse.json({ success: false, data: "User not authenticated", status: 401 });
+  }
+
+  const decision = typeof prompt === "string" && prompt.trim()
+    ? await ajAiPrompt.protect(request, {
+        userId: user.id,
+        detectPromptInjectionMessage: prompt,
+      })
+    : await ajAi.protect(request, { userId: user.id })
+  if (decision.isDenied()) {
+    return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
   }
 
   if (!prompt?.trim()) {
@@ -101,6 +112,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, data: "User not authenticated" }, { status: 401 });
   }
 
+  const decision = await ajBasic.protect(request, { userId: user.id })
+  if (decision.isDenied()) {
+    return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
+  }
+
   const agentId = request.nextUrl.searchParams.get("agentId");
   if (!agentId) {
     return NextResponse.json({ success: false, data: "Agent ID is required" }, { status: 400 });
@@ -128,6 +144,11 @@ export async function PUT(request: NextRequest) {
 
   if (!userEmail) {
     return NextResponse.json({ success: false, data: "User not authenticated" }, { status: 401 });
+  }
+
+  const decision = await ajBasic.protect(request, { userId: user.id })
+  if (decision.isDenied()) {
+    return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
   }
 
   let payload: z.infer<typeof AgentConfigUpdateSchema>;
@@ -178,6 +199,10 @@ if(data.schedule.type === "recurring" && data.status === "active"){
 }
 
 export async function DELETE(req: NextRequest){
+  const decision = await ajNetwork.protect(req)
+  if (decision.isDenied()) {
+    return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
+  }
   const {agentId} = await req.json()
   if(!agentId){
     return NextResponse.json({success: false, message: "Invalid Request"})

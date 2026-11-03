@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import { ajBasic } from "@/lib/arcjet";
 import { currentUser } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
         const user = await currentUser();
 
@@ -14,6 +15,11 @@ export async function GET() {
                 },
                 { status: 401 }
             );
+        }
+
+        const decision = await ajBasic.protect(request, { userId: user.id });
+        if (decision.isDenied()) {
+            return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 });
         }
 
         const email = user.primaryEmailAddress?.emailAddress;

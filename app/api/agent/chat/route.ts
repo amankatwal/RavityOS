@@ -1,4 +1,5 @@
 import { composioSession } from "@/lib/composioSession";
+import { ajAi, ajAiPrompt } from "@/lib/arcjet";
 import { prisma } from "@/lib/prisma";
 import { openai } from "@ai-sdk/openai";
 import { currentUser } from "@clerk/nextjs/server";
@@ -12,6 +13,22 @@ export async function POST(req:NextRequest){
     try {
          const {messages, agentId}: {messages: UIMessage[], agentId:string} = await req.json()
       const user = await currentUser()
+            if (user) {
+            const promptText = messages.at(-1)?.parts
+                .filter((part) => part.type === "text")
+                .map((part) => part.text)
+                .join(" ")
+                .trim() ?? ""
+            const decision = promptText
+                ? await ajAiPrompt.protect(req, {
+                    userId: user.id,
+                    detectPromptInjectionMessage: promptText,
+                })
+                : await ajAi.protect(req, { userId: user.id })
+                if (decision.isDenied()) {
+                        return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
+                }
+            }
     const agentConfig = await prisma.agentConfig.findUnique({
         where:{
             agentId: agentId,

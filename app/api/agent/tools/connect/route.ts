@@ -1,4 +1,5 @@
 import { composio } from "@/lib/composio";
+import { ajExpensive } from "@/lib/arcjet";
 import { composioSession } from "@/lib/composioSession";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
@@ -12,6 +13,10 @@ export async function POST (req:NextRequest){
     const user = await currentUser()
     if(!user?.primaryEmailAddress?.emailAddress){
         return NextResponse.json({success: false, message: "Session Expired"},{ status: 401})
+    }
+    const decision = await ajExpensive.protect(req, { userId: user.id })
+    if (decision.isDenied()) {
+        return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
     }
     try {
         const agent = await prisma.agentConfig.findFirst({
@@ -37,6 +42,10 @@ export async function DELETE(req:NextRequest){
 const user = await currentUser()
  if(!user?.primaryEmailAddress?.emailAddress){
         return NextResponse.json({success: false, message: "Session Expired"},{ status: 401})
+    }
+    const decision = await ajExpensive.protect(req, { userId: user.id })
+    if (decision.isDenied()) {
+        return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
     }
     try {
         const agent = await prisma.agentConfig.findFirst({

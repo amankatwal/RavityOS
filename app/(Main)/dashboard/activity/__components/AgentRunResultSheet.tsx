@@ -133,7 +133,7 @@ export default function AgentRunResultSheet({
           </Button>
         }
       />
-      <SheetContent className="data-[side=right]:w-screen data-[side=right]:sm:max-w-none lg:data-[side=right]:w-1/2">
+      <SheetContent className="data-[side=right]:w-screen data-[side=right]:sm:max-w-none lg:data-[side=right]:w-1/3">
         <SheetHeader className="border-b border-border/70 px-6 pb-5 pt-7">
           <div className="mb-5 flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
             <FileOutput className="size-4 text-chart-2" />
