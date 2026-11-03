@@ -14,11 +14,13 @@ type tool = {
 type ToolsStore = {
     tools: tool[];
     toolsLoader: boolean;
+    connectionLoader: string | null;
     fetchAllTools: ()=> void;
     connectTool: (toolSlug: string)=> void;
-    disconnectTool: (connectedAccountId: string, toolName: string)=> void;
+    disconnectTool: (connectedAccountId: string, toolName: string, toolSlug: string)=> void;
 }
 export const useToolsStore = create<ToolsStore>((set) => ({
+    connectionLoader: null,
     tools: [],
     toolsLoader: false,
     fetchAllTools: async() => {
@@ -37,6 +39,7 @@ export const useToolsStore = create<ToolsStore>((set) => ({
         }
     },
     connectTool: async(toolSlug) =>{
+         set({connectionLoader: toolSlug})
         if(!toolSlug){
             return toast.add({
                 title: "Invalid Request",
@@ -53,9 +56,12 @@ export const useToolsStore = create<ToolsStore>((set) => ({
                 title: "Bad Request",
                 type: "error"
             })
+        }finally{
+            set({connectionLoader: null})
         }
     },
-    disconnectTool: async(connectedAccountId, toolName) =>{
+    disconnectTool: async(connectedAccountId, toolName, toolSlug) =>{
+        set({connectionLoader: toolSlug})
         if(!connectedAccountId || !toolName){
              toast.add({
                 title: "Invalid Request",
@@ -63,7 +69,6 @@ export const useToolsStore = create<ToolsStore>((set) => ({
             })
             return
         }
-        console.log(connectedAccountId, toolName)
         try {
           const res = await axios.delete('/api/tools', {data:{connectedAccountId, toolName}})  
           if(res.data.success){ 
@@ -85,6 +90,8 @@ export const useToolsStore = create<ToolsStore>((set) => ({
                 title: "Bad Request",
                 type: "error"
             })
+        }finally{
+            set({connectionLoader: null})
         }
     }
 }))

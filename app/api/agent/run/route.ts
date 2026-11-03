@@ -1,5 +1,4 @@
 import { inngest } from "@/app/inngest/client";
-import { ajAi } from "@/lib/arcjet";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
@@ -9,12 +8,6 @@ export async function POST(req:NextRequest){
   const {agentId, timezone} = await req.json()
    const user = await currentUser()
    const userEmail = user?.primaryEmailAddress?.emailAddress
-  if (user) {
-    const decision = await ajAi.protect(req, { userId: user.id })
-    if (decision.isDenied()) {
-      return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
-    }
-  }
   if(!agentId || !userEmail){
     return NextResponse.json({success: false, message: "Invalid Request"})
   }
