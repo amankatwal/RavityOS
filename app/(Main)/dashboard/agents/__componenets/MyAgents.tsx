@@ -4,7 +4,7 @@ import { useAgentStore } from '../clientStore'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import Image from 'next/image'
 import { Badge } from '@/components/ui/badge'
-import { CalendarDays, CheckCheck, Ellipsis, Loader, Pause, Pencil, Play, PlaySquare, Trash, Wrench } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CalendarDays, CheckCheck, Ellipsis, Loader, Pause, Pencil, Play, PlaySquare, Trash, Wrench } from 'lucide-react'
 import { AnimatedButton } from '@/components/ui/AnimatedButton'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
@@ -41,13 +41,42 @@ const toAgentConfigResponse = (agent: ReturnType<typeof useAgentStore.getState>[
   }
 }
 
+type PlanUsage = {
+  plan: { name: string }
+  limits: { activeAgents: number | null; dailyRuns: number; mcpTools: number | null; canChat: boolean }
+  usage: { activeAgents: number; dailyRuns: number; mcpTools: number }
+}
+
 export default function MyAgents() {
-  const { fetchAllAgents, agents, agentsLoader, changeAgentStatus, runAgent, agentrunLoader } = useAgentStore()
+  const {
+    fetchAllAgents,
+    nextAgentsPage,
+    previousAgentsPage,
+    agents,
+    agentsLoader,
+    agentsCurrentCursor,
+    agentsCursorStack,
+    agentsHasMore,
+    agentsTotalCount,
+    changeAgentStatus,
+    runAgent,
+    agentrunLoader,
+  } = useAgentStore()
   const [openAgentId, setOpenAgentId] = React.useState<string | null>(null)
   const [openDeleteAgentId, setOpenDeleteAgentId] = React.useState<string | null>(null)
+  const [planUsage, setPlanUsage] = React.useState<PlanUsage | null>(null)
   React.useEffect(() => {
     void fetchAllAgents()
+    const controller = new AbortController()
+    void fetch('/api/entitlements', { signal: controller.signal })
+      .then((response) => response.json())
+      .then((result) => {
+        if (result.success) setPlanUsage(result.data)
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
   }, [fetchAllAgents])
+  const dailyRunLimitReached = planUsage !== null && planUsage.usage.dailyRuns >= planUsage.limits.dailyRuns
 
   return (
     <div className='flex flex-col gap-10'>
@@ -55,10 +84,13 @@ export default function MyAgents() {
         <div className='flex flex-col gap-2'>
           <h1 className='text-2xl font-bold'>My Agents</h1>
           <p className='text-sm text-muted-foreground'>Run, manage, and update your agents.</p>
+          {planUsage && <p className='text-xs text-muted-foreground'>
+            {planUsage.plan.name} · {planUsage.usage.activeAgents}/{planUsage.limits.activeAgents ?? 'Unlimited'} active agents · {planUsage.usage.dailyRuns}/{planUsage.limits.dailyRuns} runs today (UTC) · {planUsage.usage.mcpTools}/{planUsage.limits.mcpTools ?? 'Unlimited'} connected tools
+          </p>}
         </div>
-        {!agentsLoader && agents.length > 0 && (
+        {!agentsLoader && agentsTotalCount > 0 && (
           <Badge variant='outline' className='px-3 py-1 text-xs'>
-            {agents.length} {agents.length === 1 ? 'agent' : 'agents'}
+            {agentsTotalCount} {agentsTotalCount === 1 ? 'agent' : 'agents'}
           </Badge>
         )}
       </div>
@@ -124,7 +156,7 @@ export default function MyAgents() {
                   <DropdownMenuContent>
                     <DropdownMenuGroup>
                       <DropdownMenuLabel>Agent actions</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => runAgent(agent.agentId)} disabled={isRunning}>
+                      <DropdownMenuItem onClick={() => runAgent(agent.agentId)} disabled={isRunning || dailyRunLimitReached}>
                         <Play /> Run Now
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={()=>changeAgentStatus(agent, agent.status === "active" ? "pause" : "active")}>
@@ -193,14 +225,29 @@ export default function MyAgents() {
                 {isRunning ? (
                   <Button className='w-full' disabled><Loader className='animate-spin' /> Processing...</Button>
                 ) : (
-                  <AnimatedButton className='w-full' onClick={() => runAgent(agent.agentId)}><Play /> Run Agent</AnimatedButton>
+                  <AnimatedButton className='w-full' disabled={dailyRunLimitReached} onClick={() => runAgent(agent.agentId)}><Play /> {dailyRunLimitReached ? 'Daily limit reached' : 'Run Agent'}</AnimatedButton>
                 )}
-                <AgentChat agentId={agent.agentId} />
+                {planUsage?.limits.canChat ? <AgentChat agentId={agent.agentId} /> : (
+                  <p className='flex min-h-9 items-center justify-center border border-border px-3 text-center text-xs text-muted-foreground'>Live chat is available on Scale and Enterprise.</p>
+                )}
               </CardFooter>
             </Card>
           )
         })}
       </div>
+      {agentsTotalCount > 0 && <div className='flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-xs text-muted-foreground'>
+        <span>
+          {agentsCursorStack.length * 12 + 1}–{Math.min(agentsCursorStack.length * 12 + agents.length, agentsTotalCount)} of {agentsTotalCount} agents
+        </span>
+        <div className='flex items-center gap-2'>
+          <Button type='button' variant='outline' size='sm' disabled={!agentsCurrentCursor || agentsLoader} onClick={previousAgentsPage} aria-label='Previous agents page'>
+            <ArrowLeft aria-hidden='true' className='size-3.5' /> Previous
+          </Button>
+          <Button type='button' variant='outline' size='sm' disabled={!agentsHasMore || agentsLoader} onClick={nextAgentsPage} aria-label='Next agents page'>
+            Next <ArrowRight aria-hidden='true' className='size-3.5' />
+          </Button>
+        </div>
+      </div>}
     </div>
   )
 }

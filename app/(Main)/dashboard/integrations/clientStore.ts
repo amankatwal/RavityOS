@@ -5,7 +5,7 @@ import {create} from "zustand";
 type tool = {
     id: string,
     connected: string | null,
-    connectedTools: any,
+    connectedTools: { id: string } | null,
     name: string,
     description: string,
     icon: string,
@@ -29,9 +29,9 @@ export const useToolsStore = create<ToolsStore>((set) => ({
             const res = await axios.get('/api/tools')
             console.log(res.data.data)
             set({ tools: res.data.data, toolsLoader: false });
-        } catch (err) {
+        } catch {
             toast.add({
-                title: "Bad Request",
+                title: "Unable to load integrations",
                 type: "error"
             })
         }finally{
@@ -53,7 +53,7 @@ export const useToolsStore = create<ToolsStore>((set) => ({
            } 
         } catch (err) {
             toast.add({
-                title: "Bad Request",
+                title: axios.isAxiosError<{ message?: string }>(err) ? err.response?.data?.message ?? "Unable to connect tool" : "Unable to connect tool",
                 type: "error"
             })
         }finally{
@@ -85,7 +85,7 @@ export const useToolsStore = create<ToolsStore>((set) => ({
                 })
             }))
           }
-        } catch (err) {
+        } catch {
             toast.add({
                 title: "Bad Request",
                 type: "error"

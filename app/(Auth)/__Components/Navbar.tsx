@@ -25,9 +25,8 @@ export default function Navbar() {
         </Show>
         <Show when="signed-in">
           <Link href="/dashboard">
-          <AnimatedButton>
-            Dashboard
-          </AnimatedButton></Link>
+            <AnimatedButton>Dashboard</AnimatedButton>
+          </Link>
           <UserButton />
         </Show>
       </div>

@@ -10,7 +10,7 @@ export default function SignInPage() {
         </h1>
       </div>
       <SignIn
-        forceRedirectUrl="/dashboard"
+        forceRedirectUrl="/auth-redirect"
         appearance={{
           elements: {
             button: "ravity-clerk-animated-button",

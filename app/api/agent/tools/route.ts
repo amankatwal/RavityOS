@@ -20,9 +20,10 @@ export async function GET(req:NextRequest){
         return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
     }
     try {
-           const result = await prisma.agentConfig.findUnique({
+           const result = await prisma.agentConfig.findFirst({
         where:{
             agentId: agentId,
+            userEmail,
         }
     })
     if(result === null){

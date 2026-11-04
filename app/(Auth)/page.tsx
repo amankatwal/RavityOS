@@ -178,25 +178,65 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="pricing" className="mx-auto flex max-w-7xl flex-col items-center gap-7 px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
-          <div className="w-full border-b border-border pb-6 text-center">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-primary">Plans</p>
-            <h2 className="text-3xl font-bold sm:text-4xl">Simple, transparent pricing.</h2>
-            <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted-foreground">Choose the plan that fits the way you work. Change it as your needs grow.</p>
+        <section id="pricing" className="mx-auto flex max-w-7xl flex-col gap-8 px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
+          <div className="flex flex-col justify-between gap-5 border-b border-border pb-7 sm:flex-row sm:items-end">
+            <div>
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-primary">Plans built for your workflow</p>
+              <h2 className="text-3xl font-bold sm:text-4xl">Simple, transparent pricing.</h2>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">Choose the plan that fits the way you work. Change it as your needs grow.</p>
+            </div>
+            <p className="max-w-xs text-sm leading-6 text-muted-foreground">Plan descriptions and included features are shown with each subscription option.</p>
           </div>
-          <div className="w-full overflow-x-auto">
+          <div className="pricing-plan-grid w-full pb-2">
             <PricingTable
               appearance={{
                 theme: shadcn,
                 elements: {
                   switchIndicator: { borderRadius: "0" },
-                  switchThumb: {borderRadius:"0"},
-                  pricingTableCardHeader: { display:"grid", gap: "12px" },
-                  pricingTableCardBody:{ display: "grid", gap: "8px" },
-                  pricingTableCardDescription:{ marginTop: "30px" }
+                  switchThumb: { borderRadius: "0" },
+                  pricingTableCard: {
+                    border: "1px solid var(--border)",
+                    borderRadius: "0",
+                    boxShadow: "4px 4px 0 color-mix(in_oklch,var(--primary)_12%,transparent)",
+                  },
+                  pricingTableCardHeader: { display: "grid", gap: "12px", padding: "24px" },
+                  pricingTableCardBody: { display: "grid", gap: "12px", padding: "0 24px 24px" },
+                  pricingTableCardDescription: { marginTop: "0", lineHeight: "1.6" },
                 },
               }}
             />
+          </div>
+          <div aria-label="Plan feature descriptions" className="border-y border-border">
+            <div className="border-b border-border py-4">
+              <h3 className="text-sm font-semibold">Plan feature guide</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">A quick explanation of the limits and capabilities listed in the plans above.</p>
+            </div>
+            <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              <article className="py-4">
+                <h4 className="text-sm font-semibold">Active agents</h4>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">The number of agents you can keep active in your workspace.</p>
+              </article>
+              <article className="py-4">
+                <h4 className="text-sm font-semibold">Agent runs per day</h4>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">How many agent executions you can start each day.</p>
+              </article>
+              <article className="py-4">
+                <h4 className="text-sm font-semibold">MCP tools access</h4>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">The number of connected MCP tools available to your agents.</p>
+              </article>
+              <article className="py-4">
+                <h4 className="text-sm font-semibold">Manual triggers</h4>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Start an agent run yourself whenever the work is ready.</p>
+              </article>
+              <article className="py-4">
+                <h4 className="text-sm font-semibold">Scheduling triggers</h4>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Set an agent to run automatically on a schedule.</p>
+              </article>
+              <article className="py-4">
+                <h4 className="text-sm font-semibold">Live agent chat</h4>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Send instructions and receive responses through a live conversation with an agent.</p>
+              </article>
+            </div>
           </div>
         </section>
       </main>

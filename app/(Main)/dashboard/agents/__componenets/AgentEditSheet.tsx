@@ -27,6 +27,7 @@ import { useAgentStore } from '../clientStore'
 import { z } from "zod"
 import { Skeleton } from "@/components/ui/skeleton"
 import React from "react"
+import Link from "next/link"
 
 const agentEditSchema = z.object({
   name: z.string().trim().min(1, "Agent name is required"),
@@ -94,6 +95,7 @@ type AgentEditSheetProps = {
 
 export function AgentEditSheet({ agentId, response, onSave, trigger, open, onOpenChange }: AgentEditSheetProps) {
   const [internalOpen, setInternalOpen] = useState(false)
+  const [scheduleAllowed, setScheduleAllowed] = useState<boolean | null>(null)
   const sheetOpen = open ?? internalOpen
   const { updateAgentConfig, agentUpdateLoader, fetchAgentByID, savedAgent, getComposio, agentTools, connectionLoader,connectionBreak, connectionRequest, agentToolLoader } = useAgentStore()
   const agentImage = savedAgent?.agentId === agentId && savedAgent.agentImage
@@ -118,6 +120,23 @@ export function AgentEditSheet({ agentId, response, onSave, trigger, open, onOpe
   })
   const runType = useWatch({ control: form.control, name: "schedule.type" })
   const skillDraft = useWatch({ control: form.control, name: "skillDraft" })
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void fetch("/api/entitlements", { signal: controller.signal })
+      .then((response) => response.json())
+      .then((result) => {
+        if (result.success) setScheduleAllowed(result.data.limits.canSchedule)
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    if (scheduleAllowed === false && runType === "recurring") {
+      form.setValue("schedule.type", "once", { shouldDirty: true })
+    }
+  }, [form, runType, scheduleAllowed])
 
   useEffect(() => {
     if (sheetOpen) void getComposio(agentId)
@@ -313,6 +332,7 @@ const submitForm = form.handleSubmit(async (values) => {
         <div>
           <h3 className="text-sm font-medium">Schedule</h3>
           <p className="text-xs text-muted-foreground">Choose when and how often this agent runs.</p>
+          {scheduleAllowed === false && <p className="text-xs text-muted-foreground">Scheduled runs are available on Hobby/Pro Builder plans and above. <Link className="font-semibold text-primary underline underline-offset-2" href="/#pricing">View plans</Link></p>}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Controller
@@ -322,7 +342,7 @@ const submitForm = form.handleSubmit(async (values) => {
               <Field data-invalid={fieldState.invalid}>
                 <FieldLabel htmlFor="agent-run-type">Run type</FieldLabel>
                 <select id="agent-run-type" className="h-9 w-full rounded-md border bg-background px-3 text-sm" aria-invalid={fieldState.invalid} {...field}>
-                  {scheduleTypeOptions.map((option) => (
+                  {scheduleTypeOptions.filter((option) => scheduleAllowed !== false || option.value !== "recurring").map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>

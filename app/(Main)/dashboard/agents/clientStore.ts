@@ -4,6 +4,13 @@ import { AgentConfigRespSchema, type AgentConfigType } from '@/app/data/AgentCon
 import { toast } from '@/components/ui/toast'
 import { JsonValue } from '@prisma/client/runtime/client'
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (axios.isAxiosError<{ message?: string; data?: string }>(error)) {
+    return error.response?.data?.message ?? error.response?.data?.data ?? fallback
+  }
+  return fallback
+}
+
 export type AgentConfigUpdate = {
   name: string
   objective: string
@@ -56,9 +63,16 @@ type AgentStore = {
     agentrunLoader: string | null,
     connectionLoader: string | null,
     agents : Agent[],
+    agentsCurrentCursor: string | null,
+    agentsCursorStack: Array<string | null>,
+    agentsNextCursor: string | null,
+    agentsHasMore: boolean,
+    agentsTotalCount: number,
     savedAgent: Agent | null,
     updateAgentConfig: (agentId: string, values: AgentConfigUpdate) => Promise<boolean>,
-    fetchAllAgents: ()=> Promise<void>
+      fetchAllAgents: (cursor?: string | null, cursorStack?: Array<string | null>)=> Promise<void>,
+      nextAgentsPage: ()=> void,
+      previousAgentsPage: ()=> void,
     fetchAgentByID: (agentId: string) => Promise<void>,
     getComposio: (agentId:string) => void,
     connectionRequest : (toolSlug:string, agentId:string)=>void,
@@ -68,7 +82,7 @@ type AgentStore = {
     runAgent:(agentId: string) => void,
 }
 
-export const useAgentStore = create<AgentStore>((set)=>({
+export const useAgentStore = create<AgentStore>((set, get)=>({
 userPrompt:"",
 agentConfigResponse: null,
 createdAgentId: null,
@@ -80,6 +94,11 @@ agentrunLoader: null,
 agentDeleteLoader: false,
 connectionLoader: null,
 agents: [],
+  agentsCurrentCursor: null,
+  agentsCursorStack: [],
+  agentsNextCursor: null,
+  agentsHasMore: false,
+  agentsTotalCount: 0,
 agentTools: [],
 savedAgent: null,
 updateAgentConfig: async (agentId, values) => {
@@ -94,7 +113,7 @@ updateAgentConfig: async (agentId, values) => {
      })
     return true
   } catch (error) {
-    console.error(error)
+    toast.add({ type: "error", title: getErrorMessage(error, "Unable to update agent") })
     return false
   } finally {
     set({ agentUpdateLoader: false })
@@ -114,16 +133,19 @@ submitPrompt:async (prompt)=>{
     }
       } catch (error) {
         console.log(error)
+        toast.add({ type: "error", title: getErrorMessage(error, "Unable to create agent") })
       }finally{
         set({agentConfigLoader: false})
       }
     
 },
 
-fetchAllAgents: async()=>{
+fetchAllAgents: async(cursor = null, cursorStack = [])=>{
   set({agentsLoader: true})
   try {
-    const res = await axios.get(`/api/agents`)
+    const params = new URLSearchParams({ pageSize: "12" })
+    if (cursor) params.set("cursor", cursor)
+    const res = await axios.get(`/api/agents?${params.toString()}`)
     if(!res.data.success){
      toast.add({
       type: "error",
@@ -131,7 +153,14 @@ fetchAllAgents: async()=>{
      })
      return
     }
-    set({ agents: res.data.data ?? [] })
+    set({
+        agents: res.data.data ?? [],
+        agentsCurrentCursor: cursor,
+        agentsCursorStack: cursorStack,
+        agentsNextCursor: res.data.pagination?.nextCursor ?? null,
+        agentsHasMore: res.data.pagination?.hasMore ?? false,
+        agentsTotalCount: res.data.pagination?.totalCount ?? 0,
+    })
   } catch (err) {
     console.error(err)
     toast.add({
@@ -141,6 +170,19 @@ fetchAllAgents: async()=>{
   } finally {
     set({agentsLoader: false})
   }
+},
+
+nextAgentsPage: () => {
+  const state = get()
+  if (!state.agentsHasMore || !state.agentsNextCursor || state.agentsLoader) return
+  void state.fetchAllAgents(state.agentsNextCursor, [...state.agentsCursorStack, state.agentsCurrentCursor])
+},
+
+previousAgentsPage: () => {
+  const state = get()
+  if (!state.agentsCursorStack.length || state.agentsLoader) return
+  const cursorStack = state.agentsCursorStack.slice(0, -1)
+  void state.fetchAllAgents(state.agentsCursorStack[state.agentsCursorStack.length - 1], cursorStack)
 },
 
 fetchAgentByID: async (agentId) => {
@@ -186,10 +228,10 @@ connectionRequest : async(toolSlug, agentId)=>{
     title: `Redirecting to ${toolSlug}`
   })
   set({agentTools: []})
-  } catch {
+  } catch (error) {
   toast.add({
     type:"error",
-    title: "Invalid Request"
+    title: getErrorMessage(error, "Unable to connect tool")
   })
   }finally{
     set({connectionLoader: null})
@@ -252,8 +294,9 @@ changeAgentStatus: async(agentConfig, status) =>{
       type:"error",
       title: "Invalid Request"
     })
+    return
   }
- 
+try {
 const res = await axios.put("/api/agent/configure", {...agentConfig, status})
 if(res.data.success){
 toast.add({
@@ -269,6 +312,9 @@ toast.add({
   type:"error",
   title: "internal server error"
 })
+} catch (error) {
+  toast.add({ type: "error", title: getErrorMessage(error, "Unable to update agent status") })
+}
 },
 runAgent: async(agentId)=>{
   set({agentrunLoader: agentId})
@@ -296,7 +342,7 @@ toast.add({
   } catch (err) {
     toast.add({
         type:"error",
-        title: "Bad Request"
+        title: getErrorMessage(err, "Unable to start agent run")
       })
   }finally{set({agentrunLoader: null})}
 }

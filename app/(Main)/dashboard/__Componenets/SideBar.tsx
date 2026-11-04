@@ -10,8 +10,9 @@ const navigation = [
   { label: "Integrations", href: "/dashboard/integrations", icon: MonitorCog },
 ];
 
-export default function SideBar({ isPremium }: { isPremium: boolean }) {
+export default function SideBar({ isPremium, hasPlan }: { isPremium: boolean; hasPlan: boolean }) {
   const pathname = usePathname();
+  const visibleNavigation = hasPlan ? navigation : navigation.slice(0, 1)
 
   return (
     <aside className="border-b border-border bg-card lg:flex lg:h-screen lg:flex-col lg:border-b-0 lg:border-r">
@@ -35,7 +36,7 @@ export default function SideBar({ isPremium }: { isPremium: boolean }) {
           Workspace
         </p>
         <nav aria-label="Dashboard navigation" className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-          {navigation.map(({ label, href, icon: Icon }) => {
+          {visibleNavigation.map(({ label, href, icon: Icon }) => {
             const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 
             return (
@@ -62,7 +63,7 @@ export default function SideBar({ isPremium }: { isPremium: boolean }) {
             );
           })}
         </nav>
-        {!isPremium && (
+        {hasPlan && !isPremium && (
           <div className="mt-4 border-t border-border pt-4 lg:mt-auto lg:pt-6">
             <Link
               href="/#pricing"

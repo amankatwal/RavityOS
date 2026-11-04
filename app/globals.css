@@ -129,6 +129,24 @@
   }
 }
 
+.pricing-plan-grid .cl-pricingTable {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 1rem;
+}
+
+@media (min-width: 40rem) {
+  .pricing-plan-grid .cl-pricingTable {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 80rem) {
+  .pricing-plan-grid .cl-pricingTable {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
 .ravity-clerk-animated-button:not(.cl-userButtonTrigger) {
   position: relative;
   isolation: isolate;

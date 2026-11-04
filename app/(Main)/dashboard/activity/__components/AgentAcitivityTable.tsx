@@ -12,7 +12,7 @@ import {
 import { useActivityStore } from "../clientStore"
 import moment from "moment"
 import { Badge } from '@/components/ui/badge'
-import { Activity, ArrowRight, CircleCheck, CircleX, Clock3, LoaderCircle, MessageCircleQuestion, RefreshCw, Search, X } from "lucide-react"
+import { Activity, ArrowLeft, ArrowRight, CircleCheck, CircleX, Clock3, LoaderCircle, MessageCircleQuestion, RefreshCw, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import AgentRunResultSheet from './AgentRunResultSheet'
@@ -29,31 +29,42 @@ const filters: Array<{ value: ActivityFilter; label: string }> = [
 ]
 
 export default function AgentAcitivityTable() {
-  const { fetchAgentRuns, agentRunsLoader, agentRuns, agentRunsError } = useActivityStore()
-  const [filter, setFilter] = useState<ActivityFilter>("all")
+  const {
+    fetchAgentRuns,
+    setAgentRunFilters,
+    nextAgentRuns,
+    previousAgentRuns,
+    agentRunsLoader,
+    agentRuns,
+    agentRunsError,
+    statusFilter,
+    cursorStack,
+    hasMore,
+    totalCount,
+    counts: runCounts,
+  } = useActivityStore()
+  const filter = statusFilter as ActivityFilter
   const [query, setQuery] = useState("")
 
   useEffect(() => {
-    void fetchAgentRuns()
+    const filterTimeout = window.setTimeout(() => setAgentRunFilters(filter, query), 250)
     const refreshInterval = window.setInterval(() => void fetchAgentRuns(), 5000)
-    return () => window.clearInterval(refreshInterval)
-  }, [fetchAgentRuns])
+    return () => {
+      window.clearTimeout(filterTimeout)
+      window.clearInterval(refreshInterval)
+    }
+  }, [fetchAgentRuns, filter, query, setAgentRunFilters])
 
   const counts: Record<ActivityFilter, number> = {
-    all: agentRuns.length,
-    active: agentRuns.filter((run) => ["queued", "running"].includes(run.status)).length,
-    awaiting_input: agentRuns.filter((run) => run.status === "awaiting_input").length,
-    completed: agentRuns.filter((run) => run.status === "completed").length,
-    failed: agentRuns.filter((run) => run.status === "failed").length,
+    all: runCounts.total,
+    active: runCounts.active,
+    awaiting_input: runCounts.awaitingInput,
+    completed: runCounts.completed,
+    failed: runCounts.failed,
   }
-  const normalizedQuery = query.trim().toLowerCase()
-  const visibleRuns = agentRuns.filter((run) => {
-    const matchesFilter = filter === "all"
-      || (filter === "active" && ["queued", "running"].includes(run.status))
-      || run.status === filter
-    const matchesQuery = !normalizedQuery || `${run.name} ${run.task}`.toLowerCase().includes(normalizedQuery)
-    return matchesFilter && matchesQuery
-  })
+  const pageSize = 25
+  const firstVisibleRun = totalCount === 0 ? 0 : cursorStack.length * pageSize + 1
+  const lastVisibleRun = Math.min(firstVisibleRun + agentRuns.length - 1, totalCount)
 
   const statusSummary = [
     { label: "Total runs", value: counts.all, icon: Activity, color: "text-chart-2" },
@@ -90,7 +101,7 @@ export default function AgentAcitivityTable() {
               key={option.value}
               type="button"
               aria-pressed={filter === option.value}
-              onClick={() => setFilter(option.value)}
+              onClick={() => setAgentRunFilters(option.value, query)}
               className={`inline-flex h-8 items-center gap-2 border px-3 text-xs font-medium transition-colors ${filter === option.value ? "border-foreground bg-foreground text-background" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}
             >
               {option.label}<span className={filter === option.value ? "opacity-70" : "text-muted-foreground"}>{counts[option.value]}</span>
@@ -119,7 +130,7 @@ export default function AgentAcitivityTable() {
             {!agentRunsLoader && agentRunsError && agentRuns.length === 0 ? <TableRow><TableCell colSpan={5} className="h-36 text-center">
               <div className="space-y-2"><p className="text-sm font-medium">Activity could not be loaded</p><p className="text-xs text-muted-foreground">{agentRunsError}</p><button type="button" onClick={() => void fetchAgentRuns()} className="text-xs font-semibold text-primary hover:underline">Try again</button></div>
             </TableCell></TableRow> : null}
-            {!agentRunsLoader && !agentRunsError && agentRuns.length === 0 ? <TableRow><TableCell colSpan={5} className="h-52 text-center">
+            {!agentRunsLoader && !agentRunsError && agentRuns.length === 0 && totalCount === 0 && filter === "all" && !query.trim() ? <TableRow><TableCell colSpan={5} className="h-52 text-center">
               <div className="mx-auto flex max-w-sm flex-col items-center">
                 <span className="flex size-10 items-center justify-center bg-chart-2/10 text-chart-2"><Activity aria-hidden="true" className="size-5" /></span>
                 <p className="mt-3 text-sm font-semibold">No agent activity yet</p>
@@ -127,10 +138,10 @@ export default function AgentAcitivityTable() {
                 <Link href="/dashboard/agents" className="mt-4 inline-flex h-8 items-center gap-2 border border-border px-3 text-xs font-semibold hover:bg-muted">Go to agents <ArrowRight aria-hidden="true" className="size-3.5" /></Link>
               </div>
             </TableCell></TableRow> : null}
-            {!agentRunsLoader && agentRuns.length > 0 && visibleRuns.length === 0 ? <TableRow><TableCell colSpan={5} className="h-36 text-center">
-              <div className="space-y-2"><p className="text-sm font-medium">No matching runs</p><p className="text-xs text-muted-foreground">Try a different search or status filter.</p><button type="button" onClick={() => { setQuery(""); setFilter("all") }} className="text-xs font-semibold text-primary hover:underline">Clear filters</button></div>
+            {!agentRunsLoader && agentRuns.length === 0 && (filter !== "all" || Boolean(query.trim())) ? <TableRow><TableCell colSpan={5} className="h-36 text-center">
+              <div className="space-y-2"><p className="text-sm font-medium">No matching runs</p><p className="text-xs text-muted-foreground">Try a different search or status filter.</p><button type="button" onClick={() => { setQuery(""); setAgentRunFilters("all", "") }} className="text-xs font-semibold text-primary hover:underline">Clear filters</button></div>
             </TableCell></TableRow> : null}
-            {visibleRuns.map((agent) => <TableRow key={agent.id} className={agent.status === "awaiting_input" ? "bg-amber-700/3" : undefined}>
+            {agentRuns.map((agent) => <TableRow key={agent.id} className={agent.status === "awaiting_input" ? "bg-amber-700/3" : undefined}>
               <TableCell className="px-5 py-4 font-medium">{agent.name || "Unnamed agent"}</TableCell>
               <TableCell className="max-w-105 whitespace-normal py-4 text-muted-foreground"><span className="line-clamp-2">{agent.task || "No task details"}</span></TableCell>
               <TableCell><RunStatus status={agent.status} /></TableCell>
@@ -146,8 +157,17 @@ export default function AgentAcitivityTable() {
             </TableRow>)}
           </TableBody>
         </Table>
-        <div className="flex items-center justify-between border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
-          <span>{visibleRuns.length} of {agentRuns.length} runs</span><span className="inline-flex items-center gap-1.5"><span className="size-1.5 animate-pulse bg-emerald-600" /> Refreshes every 5 seconds</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
+          <span>{firstVisibleRun}–{lastVisibleRun} of {totalCount} runs</span>
+          <div className="flex items-center gap-2">
+            <span className="hidden items-center gap-1.5 sm:inline-flex"><span className="size-1.5 animate-pulse bg-emerald-600" /> Refreshes every 5 seconds</span>
+            <Button type="button" variant="outline" size="sm" disabled={cursorStack.length === 0 || agentRunsLoader} onClick={previousAgentRuns} aria-label="Previous activity page">
+              <ArrowLeft aria-hidden="true" className="size-3.5" /> Previous
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={!hasMore || agentRunsLoader} onClick={nextAgentRuns} aria-label="Next activity page">
+              Next <ArrowRight aria-hidden="true" className="size-3.5" />
+            </Button>
+          </div>
         </div>
       </section>
     </div>

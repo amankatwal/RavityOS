@@ -58,7 +58,7 @@ export const runAgent = async ({agentConfig,userEmail, input}:{agentConfig: Agen
             webSearch: openai.tools.webSearch({ externalWebAccess: true }),
         }
         const agent = new ToolLoopAgent({
-            model: openai("gpt-5-nano"),
+            model: openai("gpt-6-luna"),
             instructions,
             tools,
             output: Output.object({

@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { AgentConfigSystemPrompt } from "@/app/data/AgentConfigSytemPrompt";
 import { AgentConfigRespSchema } from "@/app/data/AgentConfigResSchema";
 import { prisma } from "@/lib/prisma";
-import { currentUser } from "@clerk/nextjs/server";
+import { getPlanEntitlements } from "@/lib/plan-entitlements";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import {  z } from "zod";
 import { calculateNextDailyRun } from "@/lib/agent-schedule";
 
@@ -27,6 +28,7 @@ export const AgentConfigUpdateSchema = z.object({
 export async function POST(request: NextRequest) {
   const { prompt, timezone } = await request.json();
   const user = await currentUser();
+  const { has } = await auth()
   const userEmail = user?.primaryEmailAddress?.emailAddress;
 
   if (!userEmail) {
@@ -47,7 +49,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, data: "Please enter the prompt", status: 400 });
   }
 
+  const plan = getPlanEntitlements(has)
   try {
+    const activeAgentCount = await prisma.agentConfig.count({
+      where: {
+        userEmail,
+        OR: [{ status: "active" }, { status: null }],
+      },
+    })
+    if (plan.maxActiveAgents !== null && activeAgentCount >= plan.maxActiveAgents) {
+      return NextResponse.json({
+        success: false,
+        message: `Your ${plan.name} plan allows ${plan.maxActiveAgents} active agent${plan.maxActiveAgents === 1 ? "" : "s"}. Pause an agent or upgrade your plan.`,
+      }, { status: 403 })
+    }
+
     const tools = await prisma.tool.findMany({
       select: {
         slug: true,
@@ -62,7 +78,34 @@ export async function POST(request: NextRequest) {
     schema: AgentConfigRespSchema
    }),
   });
-  if(result.output.status === "ready"){
+  if(result.output.status === "ready" && result.output.config){
+    const selectedTools = [...new Set(result.output.config.tools)]
+    if (plan.maxMcpTools !== null && selectedTools.length > plan.maxMcpTools) {
+      return NextResponse.json({
+        success: false,
+        message: `Your ${plan.name} plan allows up to ${plan.maxMcpTools} MCP tool${plan.maxMcpTools === 1 ? "" : "s"} per agent. Remove extra tools or upgrade your plan.`,
+      }, { status: 403 })
+    }
+    if (result.output.config.schedule.type === "recurring" && !plan.canSchedule) {
+      return NextResponse.json({
+        success: false,
+        message: `Scheduled runs require a paid plan. Upgrade to enable scheduling.`,
+      }, { status: 403 })
+    }
+
+    const latestActiveAgentCount = await prisma.agentConfig.count({
+      where: {
+        userEmail,
+        OR: [{ status: "active" }, { status: null }],
+      },
+    })
+    if (plan.maxActiveAgents !== null && latestActiveAgentCount >= plan.maxActiveAgents) {
+      return NextResponse.json({
+        success: false,
+        message: `Your ${plan.name} plan allows ${plan.maxActiveAgents} active agent${plan.maxActiveAgents === 1 ? "" : "s"}. Pause an agent or upgrade your plan.`,
+      }, { status: 403 })
+    }
+
     const agentId = crypto.randomUUID()
 const agent= await prisma.agentConfig.create({
       data:{
@@ -140,6 +183,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   const user = await currentUser();
+  const { has } = await auth()
   const userEmail = user?.primaryEmailAddress?.emailAddress;
 
   if (!userEmail) {
@@ -157,14 +201,38 @@ export async function PUT(request: NextRequest) {
   } catch {
     return NextResponse.json({ success: false, data: "Invalid agent update" }, { status: 400 });
   }
+  const plan = getPlanEntitlements(has)
+  if (payload.schedule.type === "recurring" && !plan.canSchedule) {
+    return NextResponse.json({
+      success: false,
+      data: "Scheduled runs require a paid plan. Upgrade to enable scheduling.",
+    }, { status: 403 })
+  }
+
   try {
     const existingAgent = await prisma.agentConfig.findFirst({
       where: { agentId: payload.agentId, userEmail },
-      select: { agentId: true },
+      select: { agentId: true, status: true },
     });
 
     if (!existingAgent) {
       return NextResponse.json({ success: false, data: "Agent not found" }, { status: 404 });
+    }
+
+    if (payload.status === "active" && existingAgent.status !== "active" && plan.maxActiveAgents !== null) {
+      const activeAgentCount = await prisma.agentConfig.count({
+        where: {
+          userEmail,
+          agentId: { not: payload.agentId },
+          OR: [{ status: "active" }, { status: null }],
+        },
+      })
+      if (activeAgentCount >= plan.maxActiveAgents) {
+        return NextResponse.json({
+          success: false,
+          data: `Your ${plan.name} plan allows ${plan.maxActiveAgents} active agent${plan.maxActiveAgents === 1 ? "" : "s"}. Pause an agent or upgrade your plan.`,
+        }, { status: 403 })
+      }
     }
 
     const { agentId,...data } = payload;

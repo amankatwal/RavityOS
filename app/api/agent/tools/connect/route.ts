@@ -3,7 +3,9 @@ import { ajExpensive } from "@/lib/arcjet";
 import { composioSession } from "@/lib/composioSession";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
+import { getPlanEntitlements, hasMcpToolCapacity, invalidateConnectedMcpToolkits } from "@/lib/plan-entitlements";
 
 export async function POST (req:NextRequest){
     const {toolSlug, agentId}= await req.json()
@@ -14,6 +16,7 @@ export async function POST (req:NextRequest){
     if(!user?.primaryEmailAddress?.emailAddress){
         return NextResponse.json({success: false, message: "Session Expired"},{ status: 401})
     }
+    const { has } = await auth()
     const decision = await ajExpensive.protect(req, { userId: user.id })
     if (decision.isDenied()) {
         return NextResponse.json({ success: false, message: "Request denied" }, { status: 429 })
@@ -21,14 +24,27 @@ export async function POST (req:NextRequest){
     try {
         const agent = await prisma.agentConfig.findFirst({
             where: {
-                agentId: agentId
+                agentId: agentId,
+                userEmail: user.primaryEmailAddress.emailAddress,
             }
         })
            if(!agent){
             return NextResponse.json({success: false, message: "Invalid Request"}, {status: 401})
            }
+        if (!agent.tools.some((slug) => slug.toLowerCase() === toolSlug.toLowerCase())) {
+            return NextResponse.json({ success: false, message: "This tool is not configured for the agent" }, { status: 403 })
+        }
+        const plan = getPlanEntitlements(has)
+        const canConnectTool = await hasMcpToolCapacity(user.primaryEmailAddress.emailAddress, toolSlug, plan.maxMcpTools)
+        if (!canConnectTool) {
+            return NextResponse.json({
+                success: false,
+                message: `Your ${plan.name} plan allows ${plan.maxMcpTools} connected MCP tool${plan.maxMcpTools === 1 ? "" : "s"}. Disconnect a tool or upgrade your plan.`,
+            }, { status: 403 })
+        }
         const session = await composioSession(agent, user?.primaryEmailAddress?.emailAddress)
        const connectionRequest= await session.authorize(toolSlug)
+        await invalidateConnectedMcpToolkits(user.primaryEmailAddress.emailAddress)
        return NextResponse.json({redirectUrl: connectionRequest.redirectUrl})
     } catch (err) {
         console.log(err)
@@ -50,7 +66,8 @@ const user = await currentUser()
     try {
         const agent = await prisma.agentConfig.findFirst({
             where: {
-                agentId: agentId
+                agentId: agentId,
+                userEmail: user.primaryEmailAddress.emailAddress,
             }
         })
            if(!agent){
@@ -63,6 +80,7 @@ const user = await currentUser()
                 return NextResponse.json({success: false, message: "Invalid Request"})
             }
             await composio.connectedAccounts.delete(toolKit?.connection?.connectedAccount?.id)
+            await invalidateConnectedMcpToolkits(user.primaryEmailAddress.emailAddress)
             return NextResponse.json({success: true, message: `${toolSlug} disconnected`})
     } catch (err) {
         console.log(err)

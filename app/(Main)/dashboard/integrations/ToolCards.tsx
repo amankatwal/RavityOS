@@ -118,7 +118,7 @@ export default function ToolCards() {
              
             </article>
             <div className='absolute bottom-4 left-5 right-5 flex'>
-             {tool.connected === "ACTIVE" ? <Button className='w-full cursor-pointer' variant={'secondary'} onClick={()=>disconnectTool(tool.connectedTools?.id, tool.name, tool.slug)}>Disconnect</Button> : <AnimatedButton className='w-full' onClick={()=> connectTool(tool.slug)}>Connect</AnimatedButton>}
+             {tool.connected === "ACTIVE" ? <Button className='w-full cursor-pointer' variant={'secondary'} onClick={()=>disconnectTool(tool.connectedTools?.id ?? "", tool.name, tool.slug)}>Disconnect</Button> : <AnimatedButton className='w-full' onClick={()=> connectTool(tool.slug)}>Connect</AnimatedButton>}
             </div>
             </div>
           )

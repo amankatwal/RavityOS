@@ -4,6 +4,7 @@ import { inngest } from "./client";
 import { AgentConfig } from "../generated/prisma/client";
 import { Agent } from "../(Main)/dashboard/agents/clientStore";
 import { runAgent } from "@/lib/run-agent";
+import { getConnectedMcpToolkits, getPlanEntitlementsForEmail, getStartOfDayInTimezone } from "@/lib/plan-entitlements";
 
 const toExecutableAgentConfig = (
     agentConfig: Omit<AgentConfig, "createdAt"> & { createdAt: Date | string },
@@ -80,6 +81,67 @@ export const ProcessScheduledAgent = inngest.createFunction(
 
         for (const run of dueRuns) {
             try {
+                if (run.status === "scheduled") {
+                    const plan = await step.run(
+                        `load-plan-${run.id}`,
+                        async () => getPlanEntitlementsForEmail(run.userEmail),
+                    );
+                    const schedule = run.agentConfig.schedule as {
+                        time?: string;
+                        timezone?: string;
+                    } | null;
+                    const timezone = schedule?.timezone ?? run.timezone ?? "UTC";
+                    const dayStart = getStartOfDayInTimezone("UTC", now);
+                    const activeAgents = plan.maxActiveAgents === null
+                        ? []
+                        : await step.run(`load-active-agents-${run.id}`, async () =>
+                            prisma.agentConfig.findMany({
+                                where: { userEmail: run.userEmail, OR: [{ status: "active" }, { status: null }] },
+                                orderBy: { createdAt: "asc" },
+                                select: { agentId: true },
+                            }),
+                        );
+                    const activeAgentPosition = activeAgents.findIndex((agent) => agent.agentId === run.agentId);
+                    const configuredTools = new Set(run.agentConfig.tools.map((tool) => tool.toLowerCase()));
+                    const connectedToolCount = plan.maxMcpTools === null
+                        ? 0
+                        : await step.run(`load-connected-tools-${run.id}`, async () =>
+                            (await getConnectedMcpToolkits(run.userEmail)).size,
+                        );
+                    const overPlanLimits = !plan.canSchedule
+                        || (plan.maxActiveAgents !== null && activeAgentPosition >= plan.maxActiveAgents)
+                        || (plan.maxMcpTools !== null && (configuredTools.size > plan.maxMcpTools || connectedToolCount > plan.maxMcpTools));
+                    const dailyRuns = await step.run(
+                        `count-daily-runs-${run.id}`,
+                        async () => prisma.agentRun.count({
+                            where: {
+                                userEmail: run.userEmail,
+                                id: { not: run.id },
+                                OR: [
+                                    { queuedAt: { gte: dayStart } },
+                                    { startedAt: { gte: dayStart } },
+                                ],
+                            },
+                        }),
+                    );
+
+                    if (overPlanLimits || dailyRuns >= plan.dailyRuns) {
+                        const nextRun = calculateNextDailyRun({
+                            time: schedule?.time ?? "08:00",
+                            timezone,
+                            after: now,
+                        });
+                        await step.run(`defer-daily-limit-${run.id}`, async () => {
+                            await prisma.agentRun.update({
+                                where: { id: run.id },
+                                data: { scheduledFor: nextRun },
+                            });
+                        });
+                        results.push({ runId: run.id, agentId: run.agentId, status: "skipped" });
+                        continue;
+                    }
+                }
+
                 const startedRun = await step.run(
                     `run-started-${run.id}`,
                     async () => {

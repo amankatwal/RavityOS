@@ -2,6 +2,7 @@
 import { Button } from '@/components/ui/button'
 import { ArrowUp, Loader2Icon, Plus, Sparkles } from 'lucide-react'
 import React from 'react'
+import Link from 'next/link'
 import { 
   Search, 
   Mail, 
@@ -16,7 +17,26 @@ import CreatedAgent from './CreatedAgent';
 
 export default function CreateAgent() {
 const {submitPrompt,userPrompt,agentConfigLoader, agentConfigResponse, createdAgentId} = useAgentStore()
+  const [planUsage, setPlanUsage] = React.useState<{
+    plan: { name: string }
+    limits: { activeAgents: number | null }
+    usage: { activeAgents: number }
+  } | null>(null)
+  React.useEffect(() => {
+    const controller = new AbortController()
+    void fetch('/api/entitlements', { signal: controller.signal })
+      .then((response) => response.json())
+      .then((result) => {
+        if (result.success) setPlanUsage(result.data)
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [])
+  const activeLimit = planUsage?.limits.activeAgents
+  const activeLimitReached = typeof activeLimit === 'number'
+    && (planUsage?.usage.activeAgents ?? 0) >= activeLimit
   const onSubmit = async ()=>{
+      if (activeLimitReached) return
       await submitPrompt(prompt)
   }
     const [prompt, setPrompt] = React.useState("")
@@ -75,6 +95,10 @@ const {submitPrompt,userPrompt,agentConfigLoader, agentConfigResponse, createdAg
       <div className=' flex flex-col gap-5'>
       <h1 className='text-2xl font-bold'>Create New Agent</h1>
       <p className='text-muted-foreground sm:text-lg'>Ask what type of agent you want to create. Type your goal, task or workflow</p></div>
+      {planUsage && <div className='flex flex-wrap items-center justify-between gap-2 border border-border bg-card px-4 py-3 text-xs'>
+        <p className='font-medium'>{planUsage.plan.name} plan · {planUsage.usage.activeAgents} / {activeLimit ?? 'Unlimited'} active agents</p>
+        {activeLimitReached && <p className='text-muted-foreground'>Active agent limit reached. <Link className='font-semibold text-primary underline underline-offset-2' href='/#pricing'>Upgrade your plan</Link> or pause an agent.</p>}
+      </div>}
         {agentConfigResponse?.status !== 'needs_clarification' && (
           <>
             <div className='w-full border bg-background p-3 mt-3 shadow-lg shadow-chart-2/30 hover:shadow-chart-2/70 transition-all duration-300 rounded-[0.75em] flex flex-col gap-3'>
@@ -94,7 +118,7 @@ const {submitPrompt,userPrompt,agentConfigLoader, agentConfigResponse, createdAg
 <Button
   type="button"
   size="icon-lg"
-  disabled={agentConfigLoader}
+  disabled={agentConfigLoader || activeLimitReached}
   onClick={onSubmit}
   className={`rounded-full ${agentConfigLoader ? "bg-chart-2 cursor-not-allowed" : " bg-chart-5 cursor-pointer"} text-white hover:bg-chart-2 disabled:opacity-100`}
 >
